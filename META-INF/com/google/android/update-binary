@@ -1,0 +1,142 @@
+#!/sbin/sh
+## 余空
+
+## 定义module.prop
+id=Module_Template
+name="示例模块 模板"
+version=1.0
+versionCode=210731
+author=YuKongA
+description="这是一个示例,This is a template."
+
+Echo() {
+# 输出system.prop
+#echo '' > $TMPDIR/system.prop
+
+# 输出service.sh
+#echo '#!/system/bin/sh
+#MODDIR=${0%/*}' > $TMPDIR/service.sh
+
+# 输出uninstall.sh
+#echo '#!/system/bin/sh
+#MODDIR=${0%/*}' > $TMPDIR/uninstall.sh
+
+# 输出post-fs-data.sh
+#echo '#!/system/bin/sh
+#MODDIR=${0%/*}' > $TMPDIR/post-fs-data.sh
+
+# sepolicy.rule
+#echo '' > $TMPDIR/sepolicy.rule
+}
+
+## 执行模块安装
+on_install() {
+  Print "________________"
+  Print "  ※ 模块安装 ※"
+  Print "¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯"
+  Print "- 正在刷入"
+  unzip -o "$ZIPFILE" -x 'META-INF/*' -d $MODPATH >&2
+  Print "- 设置权限"
+  set_perm_recursive $MODPATH 0 0 0755 0644
+}
+
+Start_Time=$(date "+%Y-%m-%d %H:%M:%S")
+Print_Time=$(date "+%m.%d %H:%M")
+
+umask 022
+TMPDIR=/dev/tmp
+rm -rf $TMPDIR 2>/dev/null
+mkdir -p $TMPDIR
+mount /data 2>/dev/null
+OUTFD=$2
+ZIPFILE=$3
+
+Print() {
+  echo "$@"
+  sleep 0.015
+}
+
+if [ $Android -ge 11 ]; then
+  PERSISTDIR=/dev/*/.magisk/mirror/persist
+else
+  PERSISTDIR=/sbin/.magisk/mirror/persist
+fi
+
+Require() {
+  Print "- 当前模块不支持此Magisk版本."
+  Print "- 请安装 Magisk v20.4+!"
+  Print
+  Print "- 或Magisk环境不完整."
+  Print "- 请修复Magisk环境!"
+  exit 1
+}
+
+[ -f /data/adb/magisk/util_functions.sh ] || Require
+. /data/adb/magisk/util_functions.sh
+[ $MAGISK_VER_CODE -lt 20400 ] && Require
+
+setup_flashable
+mount_partitions
+api_level_arch_detect
+boot_actions
+
+Ver=$version,刷入时间:$Print_Time
+
+echo "id=$id
+name=$name
+version=$Ver
+versionCode=$versionCode
+author=$author
+description=$description" > $TMPDIR/module.prop
+[ ! -f $TMPDIR/module.prop ] && abort "! 从 zip 中提取文件失败."
+
+Echo
+
+MODDIRNAME=modules_update
+MODULEROOT=$NVBASE/$MODDIRNAME
+MODID=`grep_prop id $TMPDIR/module.prop`
+MODPATH=$MODULEROOT/$MODID
+rm -rf $MODPATH 2>/dev/null
+mkdir -p $MODPATH
+cp -r $TMPDIR/* $MODPATH
+
+print_modname() {
+  Print "- Powered By Magisk"
+  Print "________________"
+  Print "  ※ 模块信息 ※"
+  Print "¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯"
+  Print "- 模块名称: $name"
+  Print "- 模块版本: $version"
+  Print "- 模块代号: $id"
+  Print "- 模块制作: $author"
+}
+
+print_modname
+on_install
+
+if [ -f $MODPATH/sepolicy.rule -a -e $PERSISTDIR ]; then
+  echo "- 安装自定义sepolicy补丁."
+  PERSISTMOD=$PERSISTDIR/magisk/$MODID
+  mkdir -p $PERSISTMOD
+  cp -af $MODPATH/sepolicy.rule $PERSISTMOD/sepolicy.rule
+fi
+
+rm -rf \
+$MODPATH/system/placeholder \
+$MODPATH/README.md $MODPATH/.git* 2>/dev/null
+
+cd /
+rm -rf $TMPDIR
+
+Print "________________"
+Print "  ※ 附加信息 ※"
+Print "¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯"
+Print "- 刷入时间: $Start_Time"
+End_Time=$(date "+%Y-%m-%d %H:%M:%S")
+Duration=$(Print $((Sleep_Time + $(date +%s -d "${End_Time}") - $(date +%s -d "${Start_Time}"))) | awk '{t=split("60 秒 60 分 24 时 999 天",a);for(n=1;n<t;n+=2){if($1==0)break;s=$1%a[n]a[n+1]s;$1=int($1/a[n])}print s}')
+Print "- 刷入耗时: $Duration"
+Print "________________"
+Print "  ※ 刷入成功 ※"
+Print "¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯"
+Print "- 请重启设备."
+exit 0
